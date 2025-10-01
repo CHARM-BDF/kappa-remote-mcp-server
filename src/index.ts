@@ -5,50 +5,158 @@ import { z } from "zod";
 // Define our MCP agent with tools
 export class MyMCP extends McpAgent {
 	server = new McpServer({
-		name: "Authless Calculator",
+		name: "Kappa Simulation Server",
 		version: "1.0.0",
 	});
 
-	async init() {
-		// Simple addition tool
-		this.server.tool("add", { a: z.number(), b: z.number() }, async ({ a, b }) => ({
-			content: [{ type: "text", text: String(a + b) }],
-		}));
+	private readonly API_BASE = "https://kappa-async.livecode.ch";
 
-		// Calculator tool with multiple operations
+	async init() {
+		// Run Kappa simulation synchronously
 		this.server.tool(
-			"calculate",
+			"run",
 			{
-				operation: z.enum(["add", "subtract", "multiply", "divide"]),
-				a: z.number(),
-				b: z.number(),
+				ka: z.string().describe("Kappa code to simulate"),
+				l: z.number().optional().default(100).describe("Simulation limit"),
+				p: z.number().optional().default(1.0).describe("Plot period"),
 			},
-			async ({ operation, a, b }) => {
-				let result: number;
-				switch (operation) {
-					case "add":
-						result = a + b;
-						break;
-					case "subtract":
-						result = a - b;
-						break;
-					case "multiply":
-						result = a * b;
-						break;
-					case "divide":
-						if (b === 0)
-							return {
-								content: [
-									{
-										type: "text",
-										text: "Error: Cannot divide by zero",
-									},
-								],
-							};
-						result = a / b;
-						break;
+			async ({ ka, l, p }) => {
+				try {
+					const response = await fetch(`${this.API_BASE}/run`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ ka, l, p }),
+					});
+
+					if (!response.ok) {
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Error: HTTP ${response.status} - ${response.statusText}`,
+								},
+							],
+						};
+					}
+
+					const result = await response.json();
+					return {
+						content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+					};
+				} catch (error) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+							},
+						],
+					};
 				}
-				return { content: [{ type: "text", text: String(result) }] };
+			},
+		);
+
+		// Run Kappa simulation asynchronously
+		this.server.tool(
+			"run_async",
+			{
+				ka: z.string().describe("Kappa code to simulate"),
+				l: z.number().optional().default(100).describe("Simulation limit"),
+				p: z.number().optional().default(1.0).describe("Plot period"),
+			},
+			async ({ ka, l, p }) => {
+				try {
+					const response = await fetch(`${this.API_BASE}/run_async`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ ka, l, p }),
+					});
+
+					if (!response.ok) {
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Error: HTTP ${response.status} - ${response.statusText}`,
+								},
+							],
+						};
+					}
+
+					const result = await response.json();
+					return {
+						content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+					};
+				} catch (error) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+							},
+						],
+					};
+				}
+			},
+		);
+
+		// Get async simulation result
+		this.server.tool(
+			"run_async_result",
+			{
+				key: z.string().describe("Unique task identifier"),
+			},
+			async ({ key }) => {
+				try {
+					const response = await fetch(`${this.API_BASE}/run_async_result`, {
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ key }),
+					});
+
+					const result = await response.json();
+
+					if (response.status === 202) {
+						return {
+							content: [
+								{
+									type: "text",
+									text: "Simulation still running. Please try again later.",
+								},
+							],
+						};
+					}
+
+					if (response.status === 404) {
+						return {
+							content: [{ type: "text", text: "Task not found." }],
+						};
+					}
+
+					if (!response.ok) {
+						return {
+							content: [
+								{
+									type: "text",
+									text: `Error: HTTP ${response.status} - ${response.statusText}`,
+								},
+							],
+						};
+					}
+
+					return {
+						content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+					};
+				} catch (error) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+							},
+						],
+					};
+				}
 			},
 		);
 	}
